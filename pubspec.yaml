@@ -1,0 +1,35 @@
+name: linktostream
+description: A tool that turns YouTube links into direct google video streams.
+
+publish_to: 'none'
+
+version: 1.0.1+2
+
+environment:
+  sdk: ">=2.17.6 <3.0.0"
+
+dependencies:
+  ffi: ^2.0.1
+  flutter:
+    sdk: flutter
+  json_annotation: ^4.4.0
+  path_provider: ^2.0.11
+  shared_preferences: ^2.0.15
+  udp: ^5.0.3
+  win32: ^2.7.0
+  window_size:
+    git:
+      url: https://github.com/google/flutter-desktop-embedding.git
+      path: plugins/window_size
+      ref: 17d4710c17f4913137e7ec931f6e71eaef443363
+
+dev_dependencies:
+  flutter_lints: ^2.0.0
+  build_runner: ^2.0.0
+  json_serializable: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/yt-dlp.exe
