@@ -2,22 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:linktostream/helper/prefs_helper.dart';
-import 'package:linktostream/helper/win32_helper.dart';
 import 'package:linktostream/notification_layer.dart';
 import 'package:linktostream/screens/main_screen.dart';
 import 'package:linktostream/screens/settings_screen.dart';
 import 'package:window_size/window_size.dart';
 
 void main() async {
-  if (Platform.isWindows) {
-    initWin32();
-  }
-
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Platform.isWindows || Platform.isLinux) {
     setWindowMinSize(const Size(600, 320));
-    setWindowMaxSize(const Size(600, 480));
+    setWindowMaxSize(const Size(720, 480));
   }
 
   await initSharedPreferences();

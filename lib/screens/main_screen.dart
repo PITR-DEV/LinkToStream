@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:linktostream/components/error_dialog.dart';
 import 'package:linktostream/consts.dart';
 import 'package:linktostream/helper/path_helper.dart';
 import 'package:linktostream/helper/prefs_helper.dart';
@@ -19,13 +20,13 @@ class MainScreen extends StatefulWidget {
 const clipboardTriggers = <String>['youtu.be/', 'youtube.com/watch?v='];
 
 class _MainScreenState extends State<MainScreen> {
-  bool active = false;
-  bool processing = false;
-  bool processingTimeout = false;
-  int clipboardConversions = 0;
+  bool _active = false;
+  bool _processing = false;
+  bool _processingTimeout = false;
+  int _clipboardConversions = 0;
   final TextEditingController _controller = TextEditingController();
-  Timer? clipboardTimer;
-  Timer? processingCancelTimer;
+  Timer? _clipboardTimer;
+  Timer? _processingCancelTimer;
 
   final List<String> _failedUrls = [];
 
@@ -60,6 +61,10 @@ class _MainScreenState extends State<MainScreen> {
     return availableQualities.last['url'];
   }
 
+  void showError(String error) {
+    showDialog(context: context, builder: (context) => ErrorDialog(error));
+  }
+
   Future<String?> fetchAndPickStream(String link) async {
     if (_failedUrls.contains(link)) return null;
     link = 'https://youtu.be/$link';
@@ -67,9 +72,10 @@ class _MainScreenState extends State<MainScreen> {
     var result =
         await Process.run(ytDlpPath, ['--dump-json', '--skip-download', link]);
     if (result.exitCode != 0) {
-      print(result.stderr);
+      final error = result.stderr;
       _failedUrls.add(link);
       cancelProcessing();
+      showError(error);
       return null;
     }
 
@@ -86,34 +92,34 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void startProcessing() {
-    if (processing) return;
+    if (_processing) return;
 
     print('processing started');
 
     setState(() {
-      processing = true;
-      processingTimeout = false;
+      _processing = true;
+      _processingTimeout = false;
     });
 
-    processingCancelTimer = Timer(const Duration(seconds: 6), () {
+    _processingCancelTimer = Timer(const Duration(seconds: 6), () {
       setState(() {
-        processingTimeout = true;
+        _processingTimeout = true;
       });
     });
   }
 
   void cancelProcessing() {
     setState(() {
-      processing = false;
-      processingTimeout = false;
+      _processing = false;
+      _processingTimeout = false;
     });
 
-    processingCancelTimer?.cancel();
+    _processingCancelTimer?.cancel();
   }
 
   Future<void> clipboardHandler() async {
     {
-      if (processing) return;
+      if (_processing) return;
       var clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
 
       if (clipboardData?.text == null) return cancelProcessing();
@@ -137,18 +143,33 @@ class _MainScreenState extends State<MainScreen> {
       Clipboard.setData(ClipboardData(text: directStream));
       _controller.text = directStream;
       setState(() {
-        clipboardConversions++;
-        processing = false;
+        _clipboardConversions++;
+        _processing = false;
       });
       NotificationLayerState.instance.sendNotification();
     }
   }
 
   void enableAutoClipboard() {
-    clipboardTimer =
+    _clipboardTimer =
         Timer.periodic(const Duration(milliseconds: 500), (Timer timer) async {
       await clipboardHandler();
     });
+  }
+
+  bool isValidVideo(String url) {
+    if (url.isEmpty) return false;
+
+    // video id only
+    if (url.length == 11 && RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(url)) {
+      return true;
+    }
+
+    // full url
+    if (url.contains('youtu.be/') || url.contains('youtube.com/watch?v=')) {
+      return true;
+    }
+    return false;
   }
 
   @override
@@ -157,7 +178,7 @@ class _MainScreenState extends State<MainScreen> {
 
     if (sharedPreferences.getBool(PrefConsts.autoConvertClipboard) ?? false) {
       setState(() {
-        active = true;
+        _active = true;
       });
       enableAutoClipboard();
     }
@@ -170,8 +191,8 @@ class _MainScreenState extends State<MainScreen> {
         Scaffold(
           appBar: AppBar(
             title: Text(
-              active
-                  ? 'Watching Clipboard ($clipboardConversions converted)'
+              _active
+                  ? 'Watching Clipboard ($_clipboardConversions converted)'
                   : 'LinkToStream',
             ),
             actions: [
@@ -195,18 +216,18 @@ class _MainScreenState extends State<MainScreen> {
                 subtitle: const Text(
                     'Automatically convert youtube links in your clipboard'),
                 trailing: Switch(
-                  value: active,
+                  value: _active,
                   onChanged: (value) async {
                     setState(() {
-                      active = value;
+                      _active = value;
                     });
                     await sharedPreferences.setBool(
                         PrefConsts.autoConvertClipboard, value);
-                    if (active) {
+                    if (_active) {
                       enableAutoClipboard();
                     } else {
-                      clipboardTimer?.cancel();
-                      clipboardTimer = null;
+                      _clipboardTimer?.cancel();
+                      _clipboardTimer = null;
                     }
                   },
                 ),
@@ -244,9 +265,9 @@ class _MainScreenState extends State<MainScreen> {
                           var res = await fetchAndPickStream(
                               stripVideoId(clipboardData.text!));
                           if (res == null) return cancelProcessing();
+                          _controller.text = res;
                           setState(() {
-                            _controller.text = res;
-                            processing = false;
+                            _processing = false;
                           });
                         },
                         icon: const Icon(Icons.content_paste_go),
@@ -256,13 +277,17 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                     Expanded(
                       child: TextField(
+                        readOnly: _processing,
                         controller: _controller,
                         onChanged: (value) async {
                           var url = value.trim();
+                          if (!isValidVideo(url)) return;
+                          startProcessing();
                           var r = await fetchAndPickStream(stripVideoId(url));
                           if (r == null) return cancelProcessing();
+                          _controller.text = r;
                           setState(() {
-                            _controller.text = r;
+                            _processing = false;
                           });
                         },
                         decoration: const InputDecoration(
@@ -292,7 +317,7 @@ class _MainScreenState extends State<MainScreen> {
             ],
           ),
         ),
-        if (processing)
+        if (_processing)
           Positioned.fill(
             child: Container(
               color: Colors.black.withAlpha(140),
@@ -301,7 +326,7 @@ class _MainScreenState extends State<MainScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const CircularProgressIndicator(),
-                    if (processingTimeout)
+                    if (_processingTimeout)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: ElevatedButton(
